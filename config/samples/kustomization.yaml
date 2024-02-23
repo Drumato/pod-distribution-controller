@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- poddistribution_v1alpha1_poddistribution.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

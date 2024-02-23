@@ -1,0 +1,27 @@
+# permissions for end users to view poddistributions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: poddistribution-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: pod-distribution-controller
+    app.kubernetes.io/part-of: pod-distribution-controller
+    app.kubernetes.io/managed-by: kustomize
+  name: poddistribution-viewer-role
+rules:
+- apiGroups:
+  - poddistribution.drumato.com
+  resources:
+  - poddistributions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - poddistribution.drumato.com
+  resources:
+  - poddistributions/status
+  verbs:
+  - get

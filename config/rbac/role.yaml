@@ -1,0 +1,32 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - poddistribution.drumato.com
+  resources:
+  - poddistributions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - poddistribution.drumato.com
+  resources:
+  - poddistributions/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - poddistribution.drumato.com
+  resources:
+  - poddistributions/status
+  verbs:
+  - get
+  - patch
+  - update

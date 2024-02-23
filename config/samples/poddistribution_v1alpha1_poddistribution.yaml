@@ -1,0 +1,12 @@
+apiVersion: poddistribution.drumato.com/v1alpha1
+kind: PodDistribution
+metadata:
+  labels:
+    app.kubernetes.io/name: poddistribution
+    app.kubernetes.io/instance: poddistribution-sample
+    app.kubernetes.io/part-of: pod-distribution-controller
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: pod-distribution-controller
+  name: poddistribution-sample
+spec:
+  # TODO(user): Add fields here

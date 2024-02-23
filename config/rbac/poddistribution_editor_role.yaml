@@ -1,0 +1,31 @@
+# permissions for end users to edit poddistributions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: poddistribution-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: pod-distribution-controller
+    app.kubernetes.io/part-of: pod-distribution-controller
+    app.kubernetes.io/managed-by: kustomize
+  name: poddistribution-editor-role
+rules:
+- apiGroups:
+  - poddistribution.drumato.com
+  resources:
+  - poddistributions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - poddistribution.drumato.com
+  resources:
+  - poddistributions/status
+  verbs:
+  - get
