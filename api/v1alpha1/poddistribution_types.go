@@ -28,6 +28,8 @@ type PodDistributionSpec struct {
 	Selector PodDistributionSelector `json:"selector"`
 	// +optional
 	MinAvailable *PodDistributionMinAvailableSpec `json:"minAvailable,omitEmpty"`
+	// +optional
+	AllowAugmentDeploymentReplicas bool `json:"allowAugmentDeploymentReplicas"`
 }
 
 type PodDistributionSelector struct {
@@ -36,13 +38,19 @@ type PodDistributionSelector struct {
 }
 
 type PodDistributionMinAvailableSpec struct {
-	Policy string `json:"policy"`
+	Policy           string `json:"policy"`
+	AllowUndrainable bool   `json:"allowUndrainable"`
 }
 
 // PodDistributionStatus defines the observed state of PodDistribution
 type PodDistributionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	TargetDeployments []TargetDeployment `json:"targetDeployments"`
+}
+
+type TargetDeployment struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Replicas  int32  `json:"replicas"`
 }
 
 //+kubebuilder:object:root=true

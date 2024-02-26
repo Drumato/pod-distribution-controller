@@ -19,13 +19,28 @@ package controller
 import (
 	"context"
 
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	poddistributionv1alpha1 "github.com/Drumato/pod-distribution-controller/api/v1alpha1"
+	"github.com/go-logr/logr"
+	policyv1 "k8s.io/api/policy/v1"
+	applymetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
+	applypolicyv1 "k8s.io/client-go/applyconfigurations/policy/v1"
+)
+
+const (
+	defaultFieldManager = "pod-distribution-controller"
 )
 
 // PodDistributionReconciler reconciles a PodDistribution object
@@ -38,19 +53,166 @@ type PodDistributionReconciler struct {
 //+kubebuilder:rbac:groups=poddistribution.drumato.com,resources=poddistributions,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=poddistribution.drumato.com,resources=poddistributions/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=poddistribution.drumato.com,resources=poddistributions/finalizers,verbs=update
+//+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-	logger.V(6).Info("start reconcile", "namespace", req.Namespace, "name", req.Name)
+	logger := log.FromContext(ctx).WithValues("namespace", req.Namespace, "name", req.Name)
+	logger.V(6).Info("start reconcile")
+
+	pd := &poddistributionv1alpha1.PodDistribution{}
+	if err := r.Get(ctx, req.NamespacedName, pd); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		logger.V(0).Error(err, "failed to get poddistribution")
+		return ctrl.Result{}, err
+	}
+
+	if pd.DeletionTimestamp != nil {
+		logger.V(6).Info("the resource is being deleted. reconcile will be canceled")
+		return ctrl.Result{}, nil
+	}
+
+	deployments, err := r.collectDeploymentsWithSelector(ctx, pd)
+	if err != nil {
+		logger.V(0).Error(err, "error in collectDeploymentsWithSelector()")
+		return ctrl.Result{}, err
+	}
+
+	if pd.Status.TargetDeployments == nil {
+		pd.Status.TargetDeployments = make([]poddistributionv1alpha1.TargetDeployment, len(deployments.Items))
+	}
+
+	for i := range deployments.Items {
+		pd.Status.TargetDeployments[i] = poddistributionv1alpha1.TargetDeployment{
+			Name:      deployments.Items[i].Name,
+			Namespace: deployments.Items[i].Namespace,
+			Replicas:  *deployments.Items[i].Spec.Replicas,
+		}
+	}
+
+	if err := r.reconcilePodDisruptionBudget(ctx, logger, pd); err != nil {
+		logger.V(0).Error(err, "error in reconcilePodDisruptionBudget()")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
+
+func (r *PodDistributionReconciler) reconcilePodDisruptionBudget(
+	ctx context.Context,
+	logger logr.Logger,
+	pd *poddistributionv1alpha1.PodDistribution,
+) error {
+	if pd.Spec.MinAvailable == nil {
+		// TODO: not implemented
+		return nil
+	}
+
+	// check whether a PodDistribution denies the request that may violate undrainable policy.
+	violateUndrainPolicyError := r.checkMinAvailableViolatesUndrainablePolicy(ctx, pd)
+	if !pd.Spec.AllowAugmentDeploymentReplicas && !pd.Spec.MinAvailable.AllowUndrainable {
+		if violateUndrainPolicyError != nil {
+			return violateUndrainPolicyError
+		}
+	}
+
+	if pd.Spec.AllowAugmentDeploymentReplicas {
+		// TODO: augment the replicas field of the target deployment and update it.
+		/*
+			if err := r.augmentTargetDeploymentReplica(); err != nil {
+				return err
+			}
+		*/
+	}
+
+	// TODO: validate pd.Spec.MinAvailable.Policy format is '.*%'
+	labelSelectorRequirements := make([]*applymetav1.LabelSelectorRequirementApplyConfiguration, len(pd.Spec.Selector.LabelSelector.MatchExpressions))
+	for i := range pd.Spec.Selector.LabelSelector.MatchExpressions {
+		expr := pd.Spec.Selector.LabelSelector.MatchExpressions[i]
+		labelSelectorRequirements[i] = applymetav1.LabelSelectorRequirement().WithKey(expr.Key).WithValues(expr.Values...).WithOperator(expr.Operator)
+	}
+	pdb := applypolicyv1.PodDisruptionBudget(pd.Name, pd.Namespace).
+		WithSpec(
+			applypolicyv1.PodDisruptionBudgetSpec().WithSelector(
+				applymetav1.LabelSelector().WithMatchLabels(pd.Spec.Selector.LabelSelector.MatchLabels).WithMatchExpressions(labelSelectorRequirements...)).WithMinAvailable(intstr.FromString(pd.Spec.MinAvailable.Policy)),
+		)
+
+	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pdb)
+	if err != nil {
+		return err
+	}
+	patch := &unstructured.Unstructured{
+		Object: obj,
+	}
+
+	var current policyv1.PodDisruptionBudget
+	err = r.Get(ctx, client.ObjectKey{Namespace: pd.Namespace, Name: pd.Name}, &current)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	currApplyConfig, err := applypolicyv1.ExtractPodDisruptionBudget(&current, defaultFieldManager)
+	if err != nil {
+		return err
+	}
+
+	if equality.Semantic.DeepEqual(pdb, currApplyConfig) {
+		return nil
+	}
+
+	if err = r.Patch(ctx, patch, client.Apply, &client.PatchOptions{
+		FieldManager: defaultFieldManager,
+		Force:        ptr.To(true),
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *PodDistributionReconciler) collectDeploymentsWithSelector(
+	ctx context.Context,
+	pd *poddistributionv1alpha1.PodDistribution,
+) (*appsv1.DeploymentList, error) {
+	deployments := &appsv1.DeploymentList{}
+
+	if err := r.List(ctx, deployments); err != nil {
+		return nil, err
+	}
+
+	return deployments, nil
+}
+
+func (r *PodDistributionReconciler) checkMinAvailableViolatesUndrainablePolicy(
+	ctx context.Context,
+	pd *poddistributionv1alpha1.PodDistribution,
+) error {
+	// TODO: if the corresponding PodDisruptionBudget is already created, the check process should be ignored(for performance).
+
+	for _, dep := range pd.Status.TargetDeployments {
+		d := &appsv1.Deployment{}
+		if err := r.Get(ctx, types.NamespacedName{Namespace: dep.Namespace, Name: dep.Name}, d); err != nil {
+			return err
+		}
+
+		// TODO: check each deployment satisfies its replicas is bigger than minAvailable
+	}
+
+	return nil
+}
+
+/*
+func ratioStringToFloat(ratio string) (float64, error) {
+}
+*/
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodDistributionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&poddistributionv1alpha1.PodDistribution{}).
+		Owns(&policyv1.PodDisruptionBudget{}).
 		Complete(r)
 }
