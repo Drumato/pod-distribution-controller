@@ -54,6 +54,8 @@ spec:
               selector:
                 properties:
                   kind:
+                    enum:
+                    - Deployment
                     type: string
                   labelSelector:
                     description: |-

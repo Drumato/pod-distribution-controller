@@ -22,7 +22,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -75,6 +77,7 @@ func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
+	// TODO: collect target kind
 	deployments, err := r.collectDeploymentsWithSelector(ctx, pd)
 	if err != nil {
 		logger.V(0).Error(err, "error in collectDeploymentsWithSelector()")
@@ -95,6 +98,11 @@ func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	if err := r.reconcilePodDisruptionBudget(ctx, logger, pd); err != nil {
 		logger.V(0).Error(err, "error in reconcilePodDisruptionBudget()")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.Status().Update(ctx, pd); err != nil {
+		logger.V(0).Error(err, "error in r.Status().Update()")
 		return ctrl.Result{}, err
 	}
 
@@ -179,11 +187,23 @@ func (r *PodDistributionReconciler) collectDeploymentsWithSelector(
 ) (*appsv1.DeploymentList, error) {
 	deployments := &appsv1.DeploymentList{}
 
-	if err := r.List(ctx, deployments); err != nil {
+	if err := r.List(ctx, deployments, &client.ListOptions{Namespace: pd.Namespace}); err != nil {
+		return nil, err
+	}
+	selector, err := metav1.LabelSelectorAsSelector(&pd.Spec.Selector.LabelSelector)
+	if err != nil {
 		return nil, err
 	}
 
-	return deployments, nil
+	filtered := &appsv1.DeploymentList{}
+	for _, d := range deployments.Items {
+		if !selector.Matches(labels.Set(d.ObjectMeta.Labels)) {
+			continue
+		}
+		filtered.Items = append(filtered.Items, d)
+	}
+
+	return filtered, nil
 }
 
 func (r *PodDistributionReconciler) checkMinAvailableViolatesUndrainablePolicy(

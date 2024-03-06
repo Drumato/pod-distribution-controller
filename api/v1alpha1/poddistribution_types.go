@@ -33,6 +33,7 @@ type PodDistributionSpec struct {
 }
 
 type PodDistributionSelector struct {
+	// +kubebuilder:validation:Enum=Deployment
 	Kind          string               `json:"kind"`
 	LabelSelector metav1.LabelSelector `json:"labelSelector"`
 }

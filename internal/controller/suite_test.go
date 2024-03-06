@@ -22,8 +22,10 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/zap/zapcore"
 
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -42,6 +44,7 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var testEnvLogger logr.Logger
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -50,7 +53,9 @@ func TestControllers(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+	zapLogger := zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(zapcore.DebugLevel))
+	testEnvLogger = zapLogger
+	logf.SetLogger(zapLogger)
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
