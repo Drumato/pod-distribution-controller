@@ -66,6 +66,17 @@ func (r *PodDistribution) ValidateCreate() (admission.Warnings, error) {
 func (r *PodDistribution) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	poddistributionlog.Info("validate update", "name", r.Name)
 
+	// TODO: .spec.maxUnavailable
+	if r.Spec.MinAvailable == nil {
+		return nil, fmt.Errorf(".spec.minAvailable or .spec.maxUnavailable must be specified")
+	}
+
+	if r.Spec.MinAvailable != nil {
+		if err := validateMinAvailableSpec(r.Spec.MinAvailable); err != nil {
+			return nil, err
+		}
+	}
+
 	poddistributionlog.Info("passed the validation webhook", "name", r.Name)
 	return nil, nil
 }

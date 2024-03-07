@@ -22,7 +22,6 @@ import (
 )
 
 var _ = Describe("PodDistribution Webhook", func() {
-
 	Context("When creating PodDistribution under Validating Webhook", func() {
 		Context("With .spec.minAvailable.Policy = 3", func() {
 			It("Should deny the fixed value in .spec.minAvailable.Policy", func() {
@@ -65,4 +64,45 @@ var _ = Describe("PodDistribution Webhook", func() {
 		})
 	})
 
+	Context("When updating PodDistribution under Validating Webhook", func() {
+		Context("With .spec.minAvailable.Policy = 3", func() {
+			It("Should deny the fixed value in .spec.minAvailable.Policy", func() {
+				pd := &PodDistribution{
+					Spec: PodDistributionSpec{
+						MinAvailable: &PodDistributionMinAvailableSpec{
+							Policy: "3",
+						},
+					},
+				}
+				_, err := pd.ValidateUpdate(nil)
+				Expect(err).Should(HaveOccurred())
+			})
+		})
+		Context("With .spec.minAvailable.Policy = <unknown-format>", func() {
+			It("Should deny the fixed value in .spec.minAvailable.Policy", func() {
+				pd := &PodDistribution{
+					Spec: PodDistributionSpec{
+						MinAvailable: &PodDistributionMinAvailableSpec{
+							Policy: "unknown-policy",
+						},
+					},
+				}
+				_, err := pd.ValidateUpdate(nil)
+				Expect(err).Should(HaveOccurred())
+			})
+		})
+
+		It("Should admit if all required fields are provided", func() {
+			pd := &PodDistribution{
+				Spec: PodDistributionSpec{
+					MinAvailable: &PodDistributionMinAvailableSpec{
+						Policy: "50%",
+					},
+				},
+			}
+			_, err := pd.ValidateUpdate(nil)
+			Expect(err).Should(BeNil())
+
+		})
+	})
 })
