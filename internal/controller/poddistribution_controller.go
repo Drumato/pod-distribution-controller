@@ -136,7 +136,6 @@ func (r *PodDistributionReconciler) reconcilePodDisruptionBudget(
 		*/
 	}
 
-	// TODO: validate pd.Spec.MinAvailable.Policy format is '.*%'
 	labelSelectorRequirements := make([]*applymetav1.LabelSelectorRequirementApplyConfiguration, len(pd.Spec.Selector.LabelSelector.MatchExpressions))
 	for i := range pd.Spec.Selector.LabelSelector.MatchExpressions {
 		expr := pd.Spec.Selector.LabelSelector.MatchExpressions[i]

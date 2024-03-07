@@ -18,20 +18,49 @@ package v1alpha1
 
 import (
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("PodDistribution Webhook", func() {
 
 	Context("When creating PodDistribution under Validating Webhook", func() {
-		It("Should deny if a required field is empty", func() {
-
-			// TODO(user): Add your logic here
-
+		Context("With .spec.minAvailable.Policy = 3", func() {
+			It("Should deny the fixed value in .spec.minAvailable.Policy", func() {
+				pd := &PodDistribution{
+					Spec: PodDistributionSpec{
+						MinAvailable: &PodDistributionMinAvailableSpec{
+							Policy: "3",
+						},
+					},
+				}
+				_, err := pd.ValidateCreate()
+				Expect(err).Should(HaveOccurred())
+			})
+		})
+		Context("With .spec.minAvailable.Policy = <unknown-format>", func() {
+			It("Should deny the fixed value in .spec.minAvailable.Policy", func() {
+				pd := &PodDistribution{
+					Spec: PodDistributionSpec{
+						MinAvailable: &PodDistributionMinAvailableSpec{
+							Policy: "unknown-policy",
+						},
+					},
+				}
+				_, err := pd.ValidateCreate()
+				Expect(err).Should(HaveOccurred())
+			})
 		})
 
 		It("Should admit if all required fields are provided", func() {
-
-			// TODO(user): Add your logic here
+			pd := &PodDistribution{
+				Spec: PodDistributionSpec{
+					MinAvailable: &PodDistributionMinAvailableSpec{
+						Policy: "50%",
+					},
+				},
+			}
+			_, err := pd.ValidateCreate()
+			Expect(err).Should(BeNil())
 
 		})
 	})

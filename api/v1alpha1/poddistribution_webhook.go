@@ -17,8 +17,13 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -26,18 +31,15 @@ import (
 
 // log is for logging in this package.
 var poddistributionlog = logf.Log.WithName("poddistribution-resource")
+var podDistributionWebhookK8sClient client.Client
 
 // SetupWebhookWithManager will setup the manager to manage the webhooks
 func (r *PodDistribution) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	podDistributionWebhookK8sClient = mgr.GetClient()
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
 		Complete()
 }
-
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-poddistribution-drumato-com-v1alpha1-poddistribution,mutating=false,failurePolicy=fail,sideEffects=None,groups=poddistribution.drumato.com,resources=poddistributions,verbs=create;update,versions=v1alpha1,name=vpoddistribution.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &PodDistribution{}
 
@@ -45,7 +47,18 @@ var _ webhook.Validator = &PodDistribution{}
 func (r *PodDistribution) ValidateCreate() (admission.Warnings, error) {
 	poddistributionlog.Info("validate create", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object creation.
+	// TODO: .spec.maxUnavailable
+	if r.Spec.MinAvailable == nil {
+		return nil, fmt.Errorf(".spec.minAvailable or .spec.maxUnavailable must be specified")
+	}
+
+	if r.Spec.MinAvailable != nil {
+		if err := validateMinAvailableSpec(r.Spec.MinAvailable); err != nil {
+			return nil, err
+		}
+	}
+
+	poddistributionlog.Info("passed the validation webhook", "name", r.Name)
 	return nil, nil
 }
 
@@ -53,7 +66,7 @@ func (r *PodDistribution) ValidateCreate() (admission.Warnings, error) {
 func (r *PodDistribution) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	poddistributionlog.Info("validate update", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object update.
+	poddistributionlog.Info("passed the validation webhook", "name", r.Name)
 	return nil, nil
 }
 
@@ -61,6 +74,48 @@ func (r *PodDistribution) ValidateUpdate(old runtime.Object) (admission.Warnings
 func (r *PodDistribution) ValidateDelete() (admission.Warnings, error) {
 	poddistributionlog.Info("validate delete", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object deletion.
+	poddistributionlog.Info("passed the validation webhook", "name", r.Name)
 	return nil, nil
+}
+
+func validateMinAvailableSpec(minAvailable *PodDistributionMinAvailableSpec) error {
+	if err := validateMinAvailableSpecPolicy(minAvailable.Policy); err != nil {
+		return err
+	}
+	if n, err := strconv.Atoi(minAvailable.Policy); err == nil {
+		return fmt.Errorf(".spec.minAvailable.policy deny the fixed value %d", n)
+	}
+
+	if strings.Contains(minAvailable.Policy, "%") {
+		if minAvailable.Policy[len(minAvailable.Policy)-1] != '%' {
+			return fmt.Errorf(".spec.minAvailable.policy with ratio must be formatted as '.*%%'")
+		}
+
+		if _, err := strconv.Atoi(minAvailable.Policy[:len(minAvailable.Policy)-1]); err != nil {
+			return fmt.Errorf(".spec.minAvailable.policy with ratio must be formatted as '.*%%'")
+		}
+	}
+
+	return nil
+}
+
+func validateMinAvailableSpecPolicy(policy string) error {
+	if n, err := strconv.Atoi(policy); err == nil {
+		return fmt.Errorf(".spec.minAvailable.policy deny the fixed value %d", n)
+	}
+
+	if strings.Contains(policy, "%") {
+		if policy[len(policy)-1] != '%' {
+			return fmt.Errorf(".spec.minAvailable.policy with ratio must be formatted as '.*%%'")
+		}
+
+		if _, err := strconv.Atoi(policy[:len(policy)-1]); err != nil {
+			return fmt.Errorf(".spec.minAvailable.policy with ratio must be formatted as '.*%%'")
+		}
+
+		return nil
+	}
+
+	// TODO: validate policy name
+	return fmt.Errorf(".spec.minAvailable.policy with unknown format '%s'must be denied", policy)
 }
