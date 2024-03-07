@@ -17,4 +17,7 @@ resources:
   kind: PodDistribution
   path: github.com/Drumato/pod-distribution-controller/api/v1alpha1
   version: v1alpha1
+  webhooks:
+    validation: true
+    webhookVersion: v1
 version: "3"
