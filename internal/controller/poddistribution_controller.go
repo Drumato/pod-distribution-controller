@@ -89,6 +89,10 @@ func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		logger.V(0).Error(err, "error in reconcilePodDisruptionBudget()")
 		return ctrl.Result{}, err
 	}
+	if err := r.reconcileTargetPodCollections(); err != nil {
+		logger.V(0).Error(err, "error in reconcileTargetPodCollections()")
+		return ctrl.Result{}, err
+	}
 
 	if err := r.Status().Update(ctx, pd); err != nil {
 		logger.V(0).Error(err, "error in r.Status().Update()")
@@ -96,6 +100,17 @@ func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *PodDistributionReconciler) reconcileTargetPodCollections(
+// ctx context.Context,
+// logger logr.Logger,
+// pd *poddistributionv1alpha1.PodDistribution,
+) error {
+	// TODO: augment replicas
+	// TODO: add label poddistribution.drumato.com/managed-by to collections
+	// TODO: update collection labels/spec
+	return nil
 }
 
 func (r *PodDistributionReconciler) reconcilePodDisruptionBudget(
@@ -110,19 +125,10 @@ func (r *PodDistributionReconciler) reconcilePodDisruptionBudget(
 
 	// check whether a PodDistribution denies the request that may violate undrainable policy.
 	violateUndrainPolicyError := r.detectMinAvailableUndrainablePolicy(logger, pd)
-	if !pd.Spec.AllowAugmentDeploymentReplicas && !pd.Spec.PDB.MinAvailable.AllowUndrainable {
+	if !pd.Spec.AllowAugmentPodCollectionReplicas && !pd.Spec.PDB.MinAvailable.AllowUndrainable {
 		if violateUndrainPolicyError != nil {
 			return violateUndrainPolicyError
 		}
-	}
-
-	if pd.Spec.AllowAugmentDeploymentReplicas {
-		// TODO: augment the replicas field of the target deployment and update it.
-		/*
-			if err := r.augmentTargetDeploymentReplica(); err != nil {
-				return err
-			}
-		*/
 	}
 
 	labelSelectorRequirements := make([]*applymetav1.LabelSelectorRequirementApplyConfiguration, len(pd.Spec.Selector.LabelSelector.MatchExpressions))

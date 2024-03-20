@@ -25,7 +25,7 @@ type PodDistributionSpec struct {
 	Selector PodDistributionSelector `json:"selector"`
 	PDB      *PodDistributionPDBSpec `json:"minAvailable,omitEmpty"`
 	// +optional
-	AllowAugmentDeploymentReplicas bool `json:"allowAugmentDeploymentReplicas"`
+	AllowAugmentPodCollectionReplicas bool `json:"allowAugmentPodCollectionReplicas"`
 }
 
 type PodDistributionPDBSpec struct {

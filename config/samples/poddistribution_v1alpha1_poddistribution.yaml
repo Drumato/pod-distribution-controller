@@ -9,4 +9,14 @@ metadata:
     app.kubernetes.io/created-by: pod-distribution-controller
   name: poddistribution-sample
 spec:
-  # TODO(user): Add fields here
+  selector:
+    kind: Deployment
+    labelSelector:
+      matchLabels:
+        app: sample
+  pdb:
+    minAvailable:
+      auto: ""
+      policy: "50%"
+      allowUndrainable: false
+  allowAugmentPodCollectionReplicas: true
