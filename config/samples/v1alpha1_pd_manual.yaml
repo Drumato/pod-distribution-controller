@@ -1,0 +1,31 @@
+apiVersion: poddistribution.drumato.com/v1alpha1
+kind: PodDistribution
+metadata:
+  labels:
+    app.kubernetes.io/name: poddistribution
+    app.kubernetes.io/instance: poddistribution-manual-sample
+    app.kubernetes.io/part-of: pod-distribution-controller
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: pod-distribution-controller
+  name: poddistribution-manual-sample
+spec:
+  selector:
+    kind: Deployment
+    labelSelector:
+      matchLabels:
+        app: manual-sample
+  pdb:
+    minAvailable:
+      policy: "50%"
+      allowUndrainable: true
+  distribution:
+    pod:
+      topologySpreadConstraints:
+        - manual: 
+            labelSelector:
+            matchLabels:
+              app: manual-sample
+            maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+

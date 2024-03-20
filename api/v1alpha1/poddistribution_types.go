@@ -17,20 +17,73 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // PodDistributionSpec defines the desired state of PodDistribution
 type PodDistributionSpec struct {
-	Selector PodDistributionSelector `json:"selector"`
-	PDB      *PodDistributionPDBSpec `json:"minAvailable,omitEmpty"`
+	// +optional
+	Distribution *DistributionSpec       `json:"distribution"`
+	Selector     PodDistributionSelector `json:"selector"`
+	// +optional
+	PDB *PodDistributionPDBSpec `json:"pdb,omitEmpty"`
 	// +optional
 	AllowAugmentPodCollectionReplicas bool `json:"allowAugmentPodCollectionReplicas"`
+}
+
+type DistributionSpec struct {
+	// +optional
+	Pod DistributionPodSpec `json:"pod"`
+	// +optional
+	Node DistributionNodeSpec `json:"node"`
+}
+
+type DistributionPodSpec struct {
+	// +optional
+	TopologySpreadConstaints []DistributionPodTopologySpreadConstraintSpec `json:"topologySpreadConstaints"`
+	// +optional
+	Name string `json:"name,omitempty"`
+	// +optional
+	Selector map[string]string `json:"selector,omitempty"`
+	// +optional
+	Affinity *corev1.PodAffinity `json:"affinity,omitempty"`
+	// +optional
+	AntiAffinity *corev1.PodAntiAffinity `json:"antiAffinity,omitempty"`
+}
+
+type PodTopologySpreadConstraintSpecAutoMode string
+
+const (
+	PodTopologySpreadConstraintSpecAutoRegion = "region"
+	PodTopologySpreadConstraintSpecAutoZone   = "zone"
+	PodTopologySpreadConstraintSpecAutoNode   = "node"
+)
+
+type DistributionPodTopologySpreadConstraintSpec struct {
+	// +optional
+	Auto *DistributionPodTopologySpreadConstraintAutoSpec `json:"auto,omitempty"`
+	// +optional
+	Manual corev1.TopologySpreadConstraint `json:"manual"`
+}
+
+type DistributionPodTopologySpreadConstraintAutoSpec struct {
+	// +kubebuilder:validation:Enum=region/zone/node
+	Mode              string                               `json:"mode"`
+	WhenUnsatisfiable corev1.UnsatisfiableConstraintAction `json:"whenUnsatisfiable"`
+}
+
+type DistributionNodeSpec struct {
+	Name     string               `json:"name,omitempty"`
+	Selector map[string]string    `json:"selector,omitempty"`
+	Affinity *corev1.NodeAffinity `json:"affinity,omitempty"`
 }
 
 type PodDistributionPDBSpec struct {
 	// +optional
 	MinAvailable *PodDistributionMinAvailableSpec `json:"minAvailable,omitEmpty"`
+	// +optional
+	MaxUnavailable *PodDistributionMaxUnavailableSpec `json:"maxUnavailable,omitEmpty"`
 }
 
 const (
@@ -44,10 +97,19 @@ type PodDistributionSelector struct {
 }
 
 type PodDistributionMinAvailableSpec struct {
+	// +optional
 	Auto string `json:"auto"`
 	// +optional
-	Policy           string `json:"policy"`
-	AllowUndrainable bool   `json:"allowUndrainable"`
+	Policy string `json:"policy"`
+	// +optional
+	AllowUndrainable bool `json:"allowUndrainable"`
+}
+
+type PodDistributionMaxUnavailableSpec struct {
+	// +optional
+	Policy string `json:"policy"`
+	// +optional
+	AllowUnavailable bool `json:"allowUnavailable"`
 }
 
 // PodDistributionStatus defines the observed state of PodDistribution

@@ -3,20 +3,24 @@ kind: PodDistribution
 metadata:
   labels:
     app.kubernetes.io/name: poddistribution
-    app.kubernetes.io/instance: poddistribution-sample
+    app.kubernetes.io/instance: poddistribution-auto-sample
     app.kubernetes.io/part-of: pod-distribution-controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: pod-distribution-controller
-  name: poddistribution-sample
+  name: poddistribution-auto-sample
 spec:
   selector:
     kind: Deployment
     labelSelector:
       matchLabels:
-        app: sample
+        app: auto-sample
   pdb:
     minAvailable:
-      auto: ""
-      policy: "50%"
-      allowUndrainable: false
+      auto: "per-node"
+  distribution:
+    pod:
+      topologySpreadConstraints:
+        - auto: 
+            mode: node
+            whenUnsatisfiable: ScheduleAnyway
   allowAugmentPodCollectionReplicas: true
