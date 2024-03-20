@@ -20,17 +20,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // PodDistributionSpec defines the desired state of PodDistribution
 type PodDistributionSpec struct {
 	Selector PodDistributionSelector `json:"selector"`
-	// +optional
-	MinAvailable *PodDistributionMinAvailableSpec `json:"minAvailable,omitEmpty"`
+	PDB      *PodDistributionPDBSpec `json:"minAvailable,omitEmpty"`
 	// +optional
 	AllowAugmentDeploymentReplicas bool `json:"allowAugmentDeploymentReplicas"`
 }
+
+type PodDistributionPDBSpec struct {
+	// +optional
+	MinAvailable *PodDistributionMinAvailableSpec `json:"minAvailable,omitEmpty"`
+}
+
+const (
+	PodDistributionSelectorKindDeployment = "Deployment"
+)
 
 type PodDistributionSelector struct {
 	// +kubebuilder:validation:Enum=Deployment
@@ -39,16 +44,19 @@ type PodDistributionSelector struct {
 }
 
 type PodDistributionMinAvailableSpec struct {
+	Auto string `json:"auto"`
+	// +optional
 	Policy           string `json:"policy"`
 	AllowUndrainable bool   `json:"allowUndrainable"`
 }
 
 // PodDistributionStatus defines the observed state of PodDistribution
 type PodDistributionStatus struct {
-	TargetDeployments []TargetDeployment `json:"targetDeployments"`
+	TargetPodCollections []TargetPodCollection `json:"targetPodCollections"`
 }
 
-type TargetDeployment struct {
+type TargetPodCollection struct {
+	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 	Replicas  int32  `json:"replicas"`

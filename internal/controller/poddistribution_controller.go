@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -26,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
@@ -77,24 +77,13 @@ func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, nil
 	}
 
-	// TODO: collect target kind
-	deployments, err := r.collectDeploymentsWithSelector(ctx, pd)
+	podCollections, err := r.listTargetPodCollections(ctx, pd)
 	if err != nil {
-		logger.V(0).Error(err, "error in collectDeploymentsWithSelector()")
+		logger.V(0).Error(err, "error in listTargetPodCollections()")
 		return ctrl.Result{}, err
 	}
 
-	if pd.Status.TargetDeployments == nil {
-		pd.Status.TargetDeployments = make([]poddistributionv1alpha1.TargetDeployment, len(deployments.Items))
-	}
-
-	for i := range deployments.Items {
-		pd.Status.TargetDeployments[i] = poddistributionv1alpha1.TargetDeployment{
-			Name:      deployments.Items[i].Name,
-			Namespace: deployments.Items[i].Namespace,
-			Replicas:  *deployments.Items[i].Spec.Replicas,
-		}
-	}
+	pd.Status.TargetPodCollections = podCollections
 
 	if err := r.reconcilePodDisruptionBudget(ctx, logger, pd); err != nil {
 		logger.V(0).Error(err, "error in reconcilePodDisruptionBudget()")
@@ -114,14 +103,14 @@ func (r *PodDistributionReconciler) reconcilePodDisruptionBudget(
 	logger logr.Logger,
 	pd *poddistributionv1alpha1.PodDistribution,
 ) error {
-	if pd.Spec.MinAvailable == nil {
-		// TODO: not implemented
+	if pd.Spec.PDB.MinAvailable == nil {
+		// TODO: maxUnavailable not implemented
 		return nil
 	}
 
 	// check whether a PodDistribution denies the request that may violate undrainable policy.
-	violateUndrainPolicyError := r.checkMinAvailableViolatesUndrainablePolicy(ctx, pd)
-	if !pd.Spec.AllowAugmentDeploymentReplicas && !pd.Spec.MinAvailable.AllowUndrainable {
+	violateUndrainPolicyError := r.checkMinAvailableViolatesUndrainablePolicy(ctx, logger, pd)
+	if !pd.Spec.AllowAugmentDeploymentReplicas && !pd.Spec.PDB.MinAvailable.AllowUndrainable {
 		if violateUndrainPolicyError != nil {
 			return violateUndrainPolicyError
 		}
@@ -144,7 +133,7 @@ func (r *PodDistributionReconciler) reconcilePodDisruptionBudget(
 	pdb := applypolicyv1.PodDisruptionBudget(pd.Name, pd.Namespace).
 		WithSpec(
 			applypolicyv1.PodDisruptionBudgetSpec().WithSelector(
-				applymetav1.LabelSelector().WithMatchLabels(pd.Spec.Selector.LabelSelector.MatchLabels).WithMatchExpressions(labelSelectorRequirements...)).WithMinAvailable(intstr.FromString(pd.Spec.MinAvailable.Policy)),
+				applymetav1.LabelSelector().WithMatchLabels(pd.Spec.Selector.LabelSelector.MatchLabels).WithMatchExpressions(labelSelectorRequirements...)).WithMinAvailable(intstr.FromString(pd.Spec.PDB.MinAvailable.Policy)),
 		)
 
 	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pdb)
@@ -180,7 +169,33 @@ func (r *PodDistributionReconciler) reconcilePodDisruptionBudget(
 	return nil
 }
 
-func (r *PodDistributionReconciler) collectDeploymentsWithSelector(
+func (r *PodDistributionReconciler) listTargetPodCollections(
+	ctx context.Context,
+	pd *poddistributionv1alpha1.PodDistribution,
+) ([]poddistributionv1alpha1.TargetPodCollection, error) {
+	switch pd.Spec.Selector.Kind {
+	case poddistributionv1alpha1.PodDistributionSelectorKindDeployment:
+		deployments, err := r.listTargetDeployments(ctx, pd)
+		if err != nil {
+			return nil, err
+		}
+
+		collections := make([]poddistributionv1alpha1.TargetPodCollection, len(deployments.Items))
+		for i := range deployments.Items {
+			collections[i] = poddistributionv1alpha1.TargetPodCollection{
+				Kind:      pd.Spec.Selector.Kind,
+				Name:      deployments.Items[i].Name,
+				Namespace: deployments.Items[i].Namespace,
+				Replicas:  *deployments.Items[i].Spec.Replicas,
+			}
+		}
+		return collections, nil
+	default:
+		return nil, fmt.Errorf("%s not unsupported", pd.Spec.Selector.Kind)
+	}
+}
+
+func (r *PodDistributionReconciler) listTargetDeployments(
 	ctx context.Context,
 	pd *poddistributionv1alpha1.PodDistribution,
 ) (*appsv1.DeploymentList, error) {
@@ -207,26 +222,22 @@ func (r *PodDistributionReconciler) collectDeploymentsWithSelector(
 
 func (r *PodDistributionReconciler) checkMinAvailableViolatesUndrainablePolicy(
 	ctx context.Context,
+	logger logr.Logger,
 	pd *poddistributionv1alpha1.PodDistribution,
 ) error {
-	// TODO: if the corresponding PodDisruptionBudget is already created, the check process should be ignored(for performance).
-
-	for _, dep := range pd.Status.TargetDeployments {
-		d := &appsv1.Deployment{}
-		if err := r.Get(ctx, types.NamespacedName{Namespace: dep.Namespace, Name: dep.Name}, d); err != nil {
+	for _, collection := range pd.Status.TargetPodCollections {
+		pv := intstr.FromString(pd.Spec.PDB.MinAvailable.Policy)
+		v, err := intstr.GetScaledValueFromIntOrPercent(&pv, int(collection.Replicas), true)
+		if err != nil {
 			return err
 		}
 
-		// TODO: check each deployment satisfies its replicas is bigger than minAvailable
+		logger.V(0).Info(".spec.pdb.minAvailable.Policy scaled up", "value", v)
+		// TODO: check
 	}
 
 	return nil
 }
-
-/*
-func ratioStringToFloat(ratio string) (float64, error) {
-}
-*/
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodDistributionReconciler) SetupWithManager(mgr ctrl.Manager) error {

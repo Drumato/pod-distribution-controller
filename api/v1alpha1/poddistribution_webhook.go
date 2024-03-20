@@ -47,34 +47,35 @@ var _ webhook.Validator = &PodDistribution{}
 func (r *PodDistribution) ValidateCreate() (admission.Warnings, error) {
 	poddistributionlog.Info("validate create", "name", r.Name)
 
-	// TODO: .spec.maxUnavailable
-	if r.Spec.MinAvailable == nil {
-		return nil, fmt.Errorf(".spec.minAvailable or .spec.maxUnavailable must be specified")
-	}
-
-	if r.Spec.MinAvailable != nil {
-		if err := validateMinAvailableSpec(r.Spec.MinAvailable); err != nil {
-			return nil, err
-		}
+	if err := r.validatePDBSpec(); err != nil {
+		return nil, err
 	}
 
 	poddistributionlog.Info("passed the validation webhook", "name", r.Name)
 	return nil, nil
 }
 
+func (r *PodDistribution) validatePDBSpec() error {
+	// TODO: .spec.maxUnavailable
+	if r.Spec.PDB.MinAvailable == nil {
+		return fmt.Errorf(".spec.minAvailable or .spec.maxUnavailable must be specified")
+	}
+
+	if r.Spec.PDB.MinAvailable != nil {
+		if err := validateMinAvailableSpec(r.Spec.PDB.MinAvailable); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *PodDistribution) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	poddistributionlog.Info("validate update", "name", r.Name)
 
-	// TODO: .spec.maxUnavailable
-	if r.Spec.MinAvailable == nil {
-		return nil, fmt.Errorf(".spec.minAvailable or .spec.maxUnavailable must be specified")
-	}
-
-	if r.Spec.MinAvailable != nil {
-		if err := validateMinAvailableSpec(r.Spec.MinAvailable); err != nil {
-			return nil, err
-		}
+	if err := r.validatePDBSpec(); err != nil {
+		return nil, err
 	}
 
 	poddistributionlog.Info("passed the validation webhook", "name", r.Name)
@@ -90,43 +91,29 @@ func (r *PodDistribution) ValidateDelete() (admission.Warnings, error) {
 }
 
 func validateMinAvailableSpec(minAvailable *PodDistributionMinAvailableSpec) error {
-	if err := validateMinAvailableSpecPolicy(minAvailable.Policy); err != nil {
+	if err := validatePDBPolicy(".spec.minAvailable.policy" /* field name */, minAvailable.Policy); err != nil {
 		return err
-	}
-	if n, err := strconv.Atoi(minAvailable.Policy); err == nil {
-		return fmt.Errorf(".spec.minAvailable.policy deny the fixed value %d", n)
-	}
-
-	if strings.Contains(minAvailable.Policy, "%") {
-		if minAvailable.Policy[len(minAvailable.Policy)-1] != '%' {
-			return fmt.Errorf(".spec.minAvailable.policy with ratio must be formatted as '.*%%'")
-		}
-
-		if _, err := strconv.Atoi(minAvailable.Policy[:len(minAvailable.Policy)-1]); err != nil {
-			return fmt.Errorf(".spec.minAvailable.policy with ratio must be formatted as '.*%%'")
-		}
 	}
 
 	return nil
 }
 
-func validateMinAvailableSpecPolicy(policy string) error {
+func validatePDBPolicy(fieldName string, policy string) error {
 	if n, err := strconv.Atoi(policy); err == nil {
-		return fmt.Errorf(".spec.minAvailable.policy deny the fixed value %d", n)
+		return fmt.Errorf("%s deny the fixed value %d", fieldName, n)
 	}
 
 	if strings.Contains(policy, "%") {
 		if policy[len(policy)-1] != '%' {
-			return fmt.Errorf(".spec.minAvailable.policy with ratio must be formatted as '.*%%'")
+			return fmt.Errorf("%s with ratio must be formatted as '.*%%'", fieldName)
 		}
 
 		if _, err := strconv.Atoi(policy[:len(policy)-1]); err != nil {
-			return fmt.Errorf(".spec.minAvailable.policy with ratio must be formatted as '.*%%'")
+			return fmt.Errorf("%s with ratio must be formatted as '.*%%'", fieldName)
 		}
 
 		return nil
 	}
 
-	// TODO: validate policy name
-	return fmt.Errorf(".spec.minAvailable.policy with unknown format '%s'must be denied", policy)
+	return fmt.Errorf("%s with unknown format '%s'", fieldName, policy)
 }

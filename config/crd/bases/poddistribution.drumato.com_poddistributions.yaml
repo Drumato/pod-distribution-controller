@@ -43,13 +43,18 @@ spec:
                 type: boolean
               minAvailable:
                 properties:
-                  allowUndrainable:
-                    type: boolean
-                  policy:
-                    type: string
-                required:
-                - allowUndrainable
-                - policy
+                  minAvailable:
+                    properties:
+                      allowUndrainable:
+                        type: boolean
+                      auto:
+                        type: string
+                      policy:
+                        type: string
+                    required:
+                    - allowUndrainable
+                    - auto
+                    type: object
                 type: object
               selector:
                 properties:
@@ -109,14 +114,17 @@ spec:
                 - labelSelector
                 type: object
             required:
+            - minAvailable
             - selector
             type: object
           status:
             description: PodDistributionStatus defines the observed state of PodDistribution
             properties:
-              targetDeployments:
+              targetPodCollections:
                 items:
                   properties:
+                    kind:
+                      type: string
                     name:
                       type: string
                     namespace:
@@ -125,13 +133,14 @@ spec:
                       format: int32
                       type: integer
                   required:
+                  - kind
                   - name
                   - namespace
                   - replicas
                   type: object
                 type: array
             required:
-            - targetDeployments
+            - targetPodCollections
             type: object
         type: object
     served: true

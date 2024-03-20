@@ -73,8 +73,10 @@ var _ = Describe("PodDistribution Controller", func() {
 									MatchLabels: testLabels(),
 								},
 							},
-							MinAvailable: &poddistributionv1alpha1.PodDistributionMinAvailableSpec{
-								Policy: "50%",
+							PDB: &poddistributionv1alpha1.PodDistributionPDBSpec{
+								MinAvailable: &poddistributionv1alpha1.PodDistributionMinAvailableSpec{
+									Policy: "50%",
+								},
 							},
 						},
 					}
@@ -108,7 +110,7 @@ var _ = Describe("PodDistribution Controller", func() {
 				Eventually(func() error {
 					return k8sClient.Get(ctx, typeNamespacedName, resource)
 				}).WithTimeout(10 * time.Second).Should(BeNil())
-				Expect(len(resource.Status.TargetDeployments)).Should(BeIdenticalTo(1))
+				Expect(len(resource.Status.TargetPodCollections)).Should(BeIdenticalTo(1))
 
 				By("try to get the corresponding PodDisruptionBudget resource")
 				pdb := &policyv1.PodDisruptionBudget{}
