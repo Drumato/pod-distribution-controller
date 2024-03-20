@@ -109,7 +109,7 @@ func (r *PodDistributionReconciler) reconcilePodDisruptionBudget(
 	}
 
 	// check whether a PodDistribution denies the request that may violate undrainable policy.
-	violateUndrainPolicyError := r.checkMinAvailableViolatesUndrainablePolicy(ctx, logger, pd)
+	violateUndrainPolicyError := r.detectMinAvailableUndrainablePolicy(logger, pd)
 	if !pd.Spec.AllowAugmentDeploymentReplicas && !pd.Spec.PDB.MinAvailable.AllowUndrainable {
 		if violateUndrainPolicyError != nil {
 			return violateUndrainPolicyError
@@ -220,20 +220,22 @@ func (r *PodDistributionReconciler) listTargetDeployments(
 	return filtered, nil
 }
 
-func (r *PodDistributionReconciler) checkMinAvailableViolatesUndrainablePolicy(
-	ctx context.Context,
+func (r *PodDistributionReconciler) detectMinAvailableUndrainablePolicy(
 	logger logr.Logger,
 	pd *poddistributionv1alpha1.PodDistribution,
 ) error {
 	for _, collection := range pd.Status.TargetPodCollections {
 		pv := intstr.FromString(pd.Spec.PDB.MinAvailable.Policy)
-		v, err := intstr.GetScaledValueFromIntOrPercent(&pv, int(collection.Replicas), true)
+		expectedReplicas, err := intstr.GetScaledValueFromIntOrPercent(&pv, int(collection.Replicas), true)
 		if err != nil {
 			return err
 		}
 
-		logger.V(0).Info(".spec.pdb.minAvailable.Policy scaled up", "value", v)
-		// TODO: check
+		logger.V(0).Info(".spec.pdb.minAvailable.Policy scaled up", "value", expectedReplicas)
+
+		if int(collection.Replicas) <= expectedReplicas {
+			return fmt.Errorf("undrainable policy detected: %s replicas must be bigger than .spec.pdb.minAvailable actual value %d", collection.Name, expectedReplicas)
+		}
 	}
 
 	return nil
