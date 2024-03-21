@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -31,8 +32,12 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	poddistributionv1alpha1 "github.com/Drumato/pod-distribution-controller/api/v1alpha1"
 	"github.com/go-logr/logr"
@@ -55,6 +60,7 @@ type PodDistributionReconciler struct {
 //+kubebuilder:rbac:groups=poddistribution.drumato.com,resources=poddistributions,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=poddistribution.drumato.com,resources=poddistributions/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=poddistribution.drumato.com,resources=poddistributions/finalizers,verbs=update
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -75,6 +81,13 @@ func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if pd.DeletionTimestamp != nil {
 		logger.V(6).Info("the resource is being deleted. reconcile will be canceled")
 		return ctrl.Result{}, nil
+	}
+
+	if pd.Spec.Labeler != nil {
+		if err := r.reconcileLabeler(ctx, pd); err != nil {
+			logger.V(0).Error(err, "error in reconcileLabeler()")
+			return ctrl.Result{}, err
+		}
 	}
 
 	podCollections, err := r.listTargetPodCollections(ctx, pd)
@@ -108,8 +121,32 @@ func (r *PodDistributionReconciler) reconcileTargetPodCollections(
 // pd *poddistributionv1alpha1.PodDistribution,
 ) error {
 	// TODO: augment replicas
-	// TODO: add label poddistribution.drumato.com/managed-by to collections
-	// TODO: update collection labels/spec
+	// TODO: update collection spec
+	return nil
+}
+
+func (r *PodDistributionReconciler) reconcileLabeler(
+	ctx context.Context,
+	pd *poddistributionv1alpha1.PodDistribution,
+) error {
+	labeler := &poddistributionv1alpha1.Labeler{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: pd.Namespace,
+			Name:      pd.Name,
+		},
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, labeler, func() error {
+		if pd.Spec.Labeler.LabelRules == nil {
+			pd.Spec.Labeler.LabelRules = []poddistributionv1alpha1.LabelRule{}
+		}
+		labeler.Spec.LabelRules = pd.Spec.Labeler.LabelRules
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -251,6 +288,23 @@ func (r *PodDistributionReconciler) detectMinAvailableUndrainablePolicy(
 func (r *PodDistributionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&poddistributionv1alpha1.PodDistribution{}).
+		Owns(&poddistributionv1alpha1.Labeler{}, builder.WithPredicates(predicate.Funcs{
+			CreateFunc: func(ce event.CreateEvent) bool { return false },
+			UpdateFunc: func(ue event.UpdateEvent) bool {
+				old, ok := ue.ObjectOld.(*poddistributionv1alpha1.Labeler)
+				if !ok {
+					return false
+				}
+
+				new, ok := ue.ObjectNew.(*poddistributionv1alpha1.Labeler)
+				if !ok {
+					return false
+				}
+				return !reflect.DeepEqual(old.Status, new.Status)
+			},
+			DeleteFunc:  func(de event.DeleteEvent) bool { return false },
+			GenericFunc: func(ge event.GenericEvent) bool { return false },
+		})).
 		Owns(&policyv1.PodDisruptionBudget{}).
 		Complete(r)
 }

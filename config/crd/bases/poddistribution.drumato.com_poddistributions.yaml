@@ -1145,6 +1145,26 @@ spec:
                         type: array
                     type: object
                 type: object
+              labelers:
+                description: LabelerSpec defines the desired state of Labeler
+                properties:
+                  labelRule:
+                    items:
+                      properties:
+                        celExpression:
+                          type: string
+                        kind:
+                          enum:
+                          - Deployment
+                          type: string
+                      required:
+                      - celExpression
+                      - kind
+                      type: object
+                    type: array
+                required:
+                - labelRule
+                type: object
               pdb:
                 properties:
                   maxUnavailable:

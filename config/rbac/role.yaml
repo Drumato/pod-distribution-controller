@@ -5,6 +5,44 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - poddistribution.drumato.com
+  resources:
+  - labelers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - poddistribution.drumato.com
+  resources:
+  - labelers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - poddistribution.drumato.com
+  resources:
+  - labelers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - poddistribution.drumato.com
   resources:
   - poddistributions

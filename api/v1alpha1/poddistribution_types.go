@@ -23,13 +23,15 @@ import (
 
 // PodDistributionSpec defines the desired state of PodDistribution
 type PodDistributionSpec struct {
+	Selector PodDistributionSelector `json:"selector"`
 	// +optional
-	Distribution *DistributionSpec       `json:"distribution"`
-	Selector     PodDistributionSelector `json:"selector"`
+	Distribution *DistributionSpec `json:"distribution"`
 	// +optional
 	PDB *PodDistributionPDBSpec `json:"pdb,omitEmpty"`
 	// +optional
 	AllowAugmentPodCollectionReplicas bool `json:"allowAugmentPodCollectionReplicas"`
+	// +optional
+	Labeler *LabelerSpec `json:"labelers"`
 }
 
 type DistributionSpec struct {
