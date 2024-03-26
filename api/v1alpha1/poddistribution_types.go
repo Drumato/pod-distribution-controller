@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -29,9 +30,10 @@ type PodDistributionSpec struct {
 	// +optional
 	PDB *PodDistributionPDBSpec `json:"pdb,omitEmpty"`
 	// +optional
-	AllowAugmentPodCollectionReplicas bool `json:"allowAugmentPodCollectionReplicas"`
-	// +optional
 	Labeler *LabelerSpec `json:"labelers"`
+	// +optional
+	// kind is automatically filled with selector.Kind
+	HPA *autoscalingv2.HorizontalPodAutoscalerSpec `json:"hpa"`
 }
 
 type DistributionSpec struct {
@@ -66,7 +68,7 @@ type DistributionPodTopologySpreadConstraintSpec struct {
 	// +optional
 	Auto *DistributionPodTopologySpreadConstraintAutoSpec `json:"auto,omitempty"`
 	// +optional
-	Manual corev1.TopologySpreadConstraint `json:"manual"`
+	Manual *corev1.TopologySpreadConstraint `json:"manual"`
 }
 
 type DistributionPodTopologySpreadConstraintAutoSpec struct {

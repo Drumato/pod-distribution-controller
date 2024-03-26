@@ -39,8 +39,6 @@ spec:
           spec:
             description: PodDistributionSpec defines the desired state of PodDistribution
             properties:
-              allowAugmentPodCollectionReplicas:
-                type: boolean
               distribution:
                 properties:
                   node:

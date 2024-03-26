@@ -22,12 +22,14 @@ import (
 	"reflect"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
@@ -102,9 +104,15 @@ func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		logger.V(0).Error(err, "error in reconcilePodDisruptionBudget()")
 		return ctrl.Result{}, err
 	}
-	if err := r.reconcileTargetPodCollections(); err != nil {
+
+	if err := r.reconcileTargetPodCollections(ctx, pd); err != nil {
 		logger.V(0).Error(err, "error in reconcileTargetPodCollections()")
 		return ctrl.Result{}, err
+	}
+
+	if pd.Spec.HPA != nil {
+		// hpa := autoscalingv2.HorizontalPodAutoscaler{}
+		// TODO: reconcile HPA
 	}
 
 	if err := r.Status().Update(ctx, pd); err != nil {
@@ -116,13 +124,72 @@ func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 func (r *PodDistributionReconciler) reconcileTargetPodCollections(
-// ctx context.Context,
-// logger logr.Logger,
-// pd *poddistributionv1alpha1.PodDistribution,
+	ctx context.Context,
+	pd *poddistributionv1alpha1.PodDistribution,
 ) error {
-	// TODO: augment replicas
-	// TODO: update collection spec
+	for _, collection := range pd.Status.TargetPodCollections {
+		switch collection.Kind {
+		case poddistributionv1alpha1.PodDistributionSelectorKindDeployment:
+			namespacedName := types.NamespacedName{
+				Namespace: collection.Namespace,
+				Name:      collection.Name,
+			}
+			dep := appsv1.Deployment{}
+			if err := r.Client.Get(ctx, namespacedName, &dep); err != nil {
+				return err
+			}
+
+			r.syncPodTemplate(ctx, pd, &dep.Spec.Template)
+			if err := r.Client.Update(ctx, &dep); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
+}
+
+func (r *PodDistributionReconciler) syncPodTemplate(
+	ctx context.Context,
+	pd *poddistributionv1alpha1.PodDistribution,
+	pt *corev1.PodTemplateSpec,
+) {
+	if pd.Spec.Distribution != nil {
+		distribution := pd.Spec.Distribution
+
+		pt.Spec.TopologySpreadConstraints = make([]corev1.TopologySpreadConstraint, 0)
+		for _, ptsc := range distribution.Pod.TopologySpreadConstaints {
+			if ptsc.Manual != nil {
+				pt.Spec.TopologySpreadConstraints = append(
+					pt.Spec.TopologySpreadConstraints,
+					*ptsc.Manual,
+				)
+				continue
+			}
+
+			// TODO: auto mode
+		}
+
+		if distribution.Node.Name != "" {
+			pt.Spec.NodeName = distribution.Node.Name
+		}
+		if distribution.Node.Selector != nil {
+			pt.Spec.NodeSelector = distribution.Node.Selector
+		}
+
+		// affinity
+		pt.Spec.Affinity = &corev1.Affinity{}
+		if distribution.Pod.Affinity != nil {
+			pt.Spec.Affinity.PodAffinity = distribution.Pod.Affinity
+		}
+		if distribution.Pod.AntiAffinity != nil {
+			pt.Spec.Affinity.PodAntiAffinity = distribution.Pod.AntiAffinity
+		}
+		if distribution.Node.Affinity != nil {
+			pt.Spec.Affinity.NodeAffinity = distribution.Node.Affinity
+		}
+	}
+
 }
 
 func (r *PodDistributionReconciler) reconcileLabeler(
@@ -161,10 +228,9 @@ func (r *PodDistributionReconciler) reconcilePodDisruptionBudget(
 	}
 
 	// check whether a PodDistribution denies the request that may violate undrainable policy.
-	violateUndrainPolicyError := r.detectMinAvailableUndrainablePolicy(logger, pd)
-	if !pd.Spec.AllowAugmentPodCollectionReplicas && !pd.Spec.PDB.MinAvailable.AllowUndrainable {
-		if violateUndrainPolicyError != nil {
-			return violateUndrainPolicyError
+	if !pd.Spec.PDB.MinAvailable.AllowUndrainable {
+		if err := r.detectMinAvailableUndrainablePolicy(logger, pd); err != nil {
+			return err
 		}
 	}
 
