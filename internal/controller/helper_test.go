@@ -74,6 +74,32 @@ func WithPodAntiAffinity(antiAffinity *corev1.PodAntiAffinity) TestPodDistributi
 	}
 }
 
+func WithNodeName(name string) TestPodDistributionOption {
+	return func(pd *poddistributionv1alpha1.PodDistribution) {
+		if pd.Spec.Distribution == nil {
+			pd.Spec.Distribution = &poddistributionv1alpha1.DistributionSpec{}
+		}
+
+		pd.Spec.Distribution.Node.Name = name
+	}
+}
+
+func WithNodeSelector(selector map[string]string) TestPodDistributionOption {
+	return func(pd *poddistributionv1alpha1.PodDistribution) {
+		if pd.Spec.Distribution == nil {
+			pd.Spec.Distribution = &poddistributionv1alpha1.DistributionSpec{}
+		}
+
+		pd.Spec.Distribution.Node.Selector = selector
+	}
+}
+
+func WithLabeler(ls *poddistributionv1alpha1.LabelerSpec) TestPodDistributionOption {
+	return func(pd *poddistributionv1alpha1.PodDistribution) {
+		pd.Spec.Labeler = ls
+	}
+}
+
 func targetDeployment(name string) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

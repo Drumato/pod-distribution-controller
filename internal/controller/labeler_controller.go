@@ -45,10 +45,6 @@ type LabelerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-const (
-	defaultPodDistributionLabelKey = "poddistribution.drumato.com/managed-by"
-)
-
 type CELMatchedObject struct {
 	Kind          string
 	Name          string
@@ -128,7 +124,7 @@ func (r *LabelerReconciler) updateTargetLabel(
 				dep.Labels = make(map[string]string)
 			}
 
-			dep.Labels[defaultPodDistributionLabelKey] = l.Name
+			dep.Labels[poddistributionv1alpha1.PodDistributionManagedByLabel] = l.Name
 			if err := r.Client.Update(ctx, dep); err != nil {
 				return err
 			}

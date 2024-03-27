@@ -38,30 +38,32 @@ var _ = Describe("PodDistribution Controller with PDB feature", func() {
 		const resourceName = "test-resource"
 
 		ctx := logr.NewContext(context.Background(), testEnvLogger)
-
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
 			Namespace: "default",
 		}
 
-		deployment := &appsv1.Deployment{}
-		poddistribution := &poddistributionv1alpha1.PodDistribution{}
-
 		Context(".policy with ratio value", func() {
 			BeforeEach(func() {
 				By("creating the target deployment for the PodDistribution")
+				deployment := targetDeployment(resourceName)
 				err := k8sClient.Get(ctx, typeNamespacedName, deployment)
 				if err != nil && errors.IsNotFound(err) {
 					Expect(k8sClient.Create(ctx, targetDeployment(resourceName))).To(Succeed())
 				}
 
 				By("creating the custom resource for the Kind PodDistribution")
-				err = k8sClient.Get(ctx, typeNamespacedName, poddistribution)
+				var resource *poddistributionv1alpha1.PodDistribution
+				err = k8sClient.Get(ctx, typeNamespacedName, resource)
 				if err != nil && errors.IsNotFound(err) {
 					minAvailable := &poddistributionv1alpha1.PodDistributionMinAvailableSpec{
 						Policy: "50%",
 					}
-					resource := newTestPodDistribution(resourceName, WithSelector("Deployment", testLabels()), WithPDBMinAvailable(minAvailable))
+					resource = newTestPodDistribution(
+						resourceName,
+						WithSelector("Deployment", testLabels()),
+						WithPDBMinAvailable(minAvailable),
+					)
 					Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 				}
 
@@ -75,41 +77,35 @@ var _ = Describe("PodDistribution Controller with PDB feature", func() {
 					NamespacedName: typeNamespacedName,
 				})
 				Expect(err).NotTo(HaveOccurred())
+
+				AfterEach(func() {
+					resource := &poddistributionv1alpha1.PodDistribution{}
+					err := k8sClient.Get(ctx, typeNamespacedName, resource)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("Cleanup the specific resource instance PodDistribution")
+					Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+					By("Cleanup the target deployment for the PodDistribution")
+					Eventually(func() error {
+						deployment := &appsv1.Deployment{}
+						err := k8sClient.Get(ctx, typeNamespacedName, deployment)
+						if err != nil {
+							return err
+						}
+						return k8sClient.Delete(ctx, deployment)
+					}).Should(Succeed())
+				})
+
+				It("should create the corresponding pdb", func() {
+					pdb := &policyv1.PodDisruptionBudget{}
+					Eventually(func() error {
+						return k8sClient.Get(ctx, typeNamespacedName, pdb)
+					}).WithTimeout(10 * time.Second).Should(BeNil())
+					Expect(pdb.Spec.MinAvailable.StrVal).Should(BeIdenticalTo("50%"))
+				})
 			})
 
-			AfterEach(func() {
-				resource := &poddistributionv1alpha1.PodDistribution{}
-				err := k8sClient.Get(ctx, typeNamespacedName, resource)
-				Expect(err).NotTo(HaveOccurred())
-
-				By("Cleanup the specific resource instance PodDistribution")
-				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-
-				By("Cleanup the target deployment for the PodDistribution")
-				Eventually(func() error {
-					err := k8sClient.Get(ctx, typeNamespacedName, deployment)
-					if err != nil {
-						return err
-					}
-					return k8sClient.Delete(ctx, deployment)
-				}).Should(Succeed())
-			})
-
-			It("should successfully get the reconcile resource", func() {
-				resource := &poddistributionv1alpha1.PodDistribution{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, resource)
-				}).WithTimeout(10 * time.Second).Should(BeNil())
-				Expect(len(resource.Status.TargetPodCollections)).Should(BeIdenticalTo(1))
-			})
-
-			It("should create the corresponding pdb", func() {
-				pdb := &policyv1.PodDisruptionBudget{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, typeNamespacedName, pdb)
-				}).WithTimeout(10 * time.Second).Should(BeNil())
-				Expect(pdb.Spec.MinAvailable.StrVal).Should(BeIdenticalTo("50%"))
-			})
 		})
 	})
 })

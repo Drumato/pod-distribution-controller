@@ -22,6 +22,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	PodDistributionManagedByLabel = "poddistribution.drumato.com/managed-by"
+)
+
 // PodDistributionSpec defines the desired state of PodDistribution
 type PodDistributionSpec struct {
 	Selector PodDistributionSelector `json:"selector"`

@@ -145,6 +145,11 @@ func (r *PodDistributionReconciler) reconcileTargetPodCollections(
 				return err
 			}
 
+			if dep.ObjectMeta.Labels == nil {
+				dep.ObjectMeta.Labels = make(map[string]string)
+			}
+			dep.ObjectMeta.Labels[poddistributionv1alpha1.PodDistributionManagedByLabel] = pd.Name
+
 			if err := r.Client.Update(ctx, &dep); err != nil {
 				return err
 			}
@@ -176,12 +181,15 @@ func (r *PodDistributionReconciler) reconcileTargetPodTemplate(
 		}
 	}
 	if pd.Spec.Distribution.Pod.Affinity != nil {
-		if err := r.reconcileTargetPodTemplatePodAffinity(ctx, pd, pt); err != nil {
+		if err := r.reconcileTargetPodTemplatePodAffinity(pd, pt); err != nil {
 			return err
 		}
 
 	}
 	if pd.Spec.Distribution.Pod.AntiAffinity != nil {
+		if err := r.reconcileTargetPodTemplatePodAntiAffinity(pd, pt); err != nil {
+			return err
+		}
 
 	}
 
@@ -213,7 +221,6 @@ func (r *PodDistributionReconciler) reconcileTargetPodTemplateTSCs(
 }
 
 func (r *PodDistributionReconciler) reconcileTargetPodTemplatePodAffinity(
-	ctx context.Context,
 	pd *poddistributionv1alpha1.PodDistribution,
 	pt *corev1.PodTemplateSpec,
 ) error {
@@ -228,6 +235,26 @@ func (r *PodDistributionReconciler) reconcileTargetPodTemplatePodAffinity(
 		// TODO: auto mode
 	} else {
 		pt.Spec.Affinity.PodAffinity = affinity.Manual
+	}
+
+	return nil
+}
+
+func (r *PodDistributionReconciler) reconcileTargetPodTemplatePodAntiAffinity(
+	pd *poddistributionv1alpha1.PodDistribution,
+	pt *corev1.PodTemplateSpec,
+) error {
+	// .spec.distribution.pod.antiAffinity value is already checked
+	antiAffinity := pd.Spec.Distribution.Pod.AntiAffinity
+
+	if pt.Spec.Affinity == nil {
+		pt.Spec.Affinity = &corev1.Affinity{}
+	}
+
+	if antiAffinity.Auto != nil {
+		// TODO: auto mode
+	} else {
+		pt.Spec.Affinity.PodAntiAffinity = antiAffinity.Manual
 	}
 
 	return nil
@@ -249,6 +276,10 @@ func (r *PodDistributionReconciler) reconcileLabeler(
 			pd.Spec.Labeler.LabelRules = []poddistributionv1alpha1.LabelRule{}
 		}
 		labeler.Spec.LabelRules = pd.Spec.Labeler.LabelRules
+		if labeler.ObjectMeta.Labels == nil {
+			labeler.ObjectMeta.Labels = make(map[string]string)
+		}
+		labeler.ObjectMeta.Labels[poddistributionv1alpha1.PodDistributionManagedByLabel] = pd.Name
 		return nil
 	})
 	if err != nil {
@@ -281,6 +312,9 @@ func (r *PodDistributionReconciler) reconcilePodDisruptionBudget(
 		labelSelectorRequirements[i] = applymetav1.LabelSelectorRequirement().WithKey(expr.Key).WithValues(expr.Values...).WithOperator(expr.Operator)
 	}
 	pdb := applypolicyv1.PodDisruptionBudget(pd.Name, pd.Namespace).
+		WithLabels(map[string]string{
+			poddistributionv1alpha1.PodDistributionManagedByLabel: pd.Name},
+		).
 		WithSpec(
 			applypolicyv1.PodDisruptionBudgetSpec().WithSelector(
 				applymetav1.LabelSelector().WithMatchLabels(pd.Spec.Selector.LabelSelector.MatchLabels).WithMatchExpressions(labelSelectorRequirements...)).WithMinAvailable(intstr.FromString(pd.Spec.PDB.MinAvailable.Policy)),
@@ -330,14 +364,22 @@ func (r *PodDistributionReconciler) listTargetPodCollections(
 			return nil, err
 		}
 
-		collections := make([]poddistributionv1alpha1.TargetPodCollection, len(deployments.Items))
-		for i := range deployments.Items {
-			collections[i] = poddistributionv1alpha1.TargetPodCollection{
-				Kind:      pd.Spec.Selector.Kind,
-				Name:      deployments.Items[i].Name,
-				Namespace: deployments.Items[i].Namespace,
-				Replicas:  *deployments.Items[i].Spec.Replicas,
+		collections := make([]poddistributionv1alpha1.TargetPodCollection, 0)
+		for _, d := range deployments.Items {
+			if d.Labels != nil {
+				v, ok := d.Labels[poddistributionv1alpha1.PodDistributionManagedByLabel]
+				managedByOtherPD := ok && v != pd.Name
+				if managedByOtherPD {
+					continue
+				}
 			}
+
+			collections = append(collections, poddistributionv1alpha1.TargetPodCollection{
+				Kind:      pd.Spec.Selector.Kind,
+				Name:      d.Name,
+				Namespace: d.Namespace,
+				Replicas:  *d.Spec.Replicas,
+			})
 		}
 		return collections, nil
 	default:
