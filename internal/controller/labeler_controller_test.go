@@ -118,6 +118,14 @@ var _ = Describe("Labeler Controller", func() {
 
 				By("Cleanup the specific resource instance Labeler")
 				Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+				for _, depName := range deploymentNames {
+					dep := &appsv1.Deployment{}
+					Eventually(func() error {
+						return k8sClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: depName}, dep)
+					}).WithTimeout(10 * time.Second).Should(BeNil())
+					Expect(k8sClient.Delete(ctx, dep)).To(Succeed())
+				}
 			})
 
 			It("should successfully reconcile the resource", func() {

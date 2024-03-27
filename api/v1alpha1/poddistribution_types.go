@@ -51,9 +51,29 @@ type DistributionPodSpec struct {
 	// +optional
 	Selector map[string]string `json:"selector,omitempty"`
 	// +optional
-	Affinity *corev1.PodAffinity `json:"affinity,omitempty"`
+	Affinity *DistributionPodAffinitySpec `json:"affinity,omitempty"`
 	// +optional
-	AntiAffinity *corev1.PodAntiAffinity `json:"antiAffinity,omitempty"`
+	AntiAffinity *DistributionPodAntiAffinitySpec `json:"antiAffinity,omitempty"`
+}
+
+type DistributionPodAffinitySpec struct {
+	// +optional
+	Auto *DistributionPodAffinityAutoSpec `json:"auto,omitempty"`
+	// +optional
+	Manual *corev1.PodAffinity `json:"manual,omitempty"`
+}
+
+type DistributionPodAffinityAutoSpec struct {
+}
+
+type DistributionPodAntiAffinitySpec struct {
+	// +optional
+	Auto *DistributionPodAntiAffinityAutoSpec `json:"auto,omitempty"`
+	// +optional
+	Manual *corev1.PodAntiAffinity `json:"manual,omitempty"`
+}
+
+type DistributionPodAntiAffinityAutoSpec struct {
 }
 
 type PodTopologySpreadConstraintSpecAutoMode string

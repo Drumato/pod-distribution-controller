@@ -35,7 +35,7 @@ import (
 )
 
 var _ = Describe("PodDistribution Controller with PDB feature", func() {
-	Context("with .spec.distribution.pod.affinity", func() {
+	Context("with .spec.distribution", func() {
 		const resourceName = "test-resource"
 
 		ctx := logr.NewContext(context.Background(), testEnvLogger)

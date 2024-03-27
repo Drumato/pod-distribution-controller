@@ -100,9 +100,11 @@ func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	pd.Status.TargetPodCollections = podCollections
 
-	if err := r.reconcilePodDisruptionBudget(ctx, logger, pd); err != nil {
-		logger.V(0).Error(err, "error in reconcilePodDisruptionBudget()")
-		return ctrl.Result{}, err
+	if pd.Spec.PDB != nil {
+		if err := r.reconcilePodDisruptionBudget(ctx, logger, pd); err != nil {
+			logger.V(0).Error(err, "error in reconcilePodDisruptionBudget()")
+			return ctrl.Result{}, err
+		}
 	}
 
 	if err := r.reconcileTargetPodCollections(ctx, pd); err != nil {
@@ -139,7 +141,10 @@ func (r *PodDistributionReconciler) reconcileTargetPodCollections(
 				return err
 			}
 
-			r.syncPodTemplate(ctx, pd, &dep.Spec.Template)
+			if err := r.reconcileTargetPodTemplate(ctx, pd, &dep.Spec.Template); err != nil {
+				return err
+			}
+
 			if err := r.Client.Update(ctx, &dep); err != nil {
 				return err
 			}
@@ -149,47 +154,83 @@ func (r *PodDistributionReconciler) reconcileTargetPodCollections(
 	return nil
 }
 
-func (r *PodDistributionReconciler) syncPodTemplate(
+func (r *PodDistributionReconciler) reconcileTargetPodTemplate(
 	ctx context.Context,
 	pd *poddistributionv1alpha1.PodDistribution,
 	pt *corev1.PodTemplateSpec,
-) {
-	if pd.Spec.Distribution != nil {
-		distribution := pd.Spec.Distribution
-
-		pt.Spec.TopologySpreadConstraints = make([]corev1.TopologySpreadConstraint, 0)
-		for _, ptsc := range distribution.Pod.TopologySpreadConstaints {
-			if ptsc.Manual != nil {
-				pt.Spec.TopologySpreadConstraints = append(
-					pt.Spec.TopologySpreadConstraints,
-					*ptsc.Manual,
-				)
-				continue
-			}
-
-			// TODO: auto mode
-		}
-
-		if distribution.Node.Name != "" {
-			pt.Spec.NodeName = distribution.Node.Name
-		}
-		if distribution.Node.Selector != nil {
-			pt.Spec.NodeSelector = distribution.Node.Selector
-		}
-
-		// affinity
-		pt.Spec.Affinity = &corev1.Affinity{}
-		if distribution.Pod.Affinity != nil {
-			pt.Spec.Affinity.PodAffinity = distribution.Pod.Affinity
-		}
-		if distribution.Pod.AntiAffinity != nil {
-			pt.Spec.Affinity.PodAntiAffinity = distribution.Pod.AntiAffinity
-		}
-		if distribution.Node.Affinity != nil {
-			pt.Spec.Affinity.NodeAffinity = distribution.Node.Affinity
-		}
+) error {
+	if pd.Spec.Distribution == nil {
+		return nil
 	}
 
+	if pd.Spec.Distribution.Node.Name != "" {
+		pt.Spec.NodeName = pd.Spec.Distribution.Node.Name
+	}
+	if pd.Spec.Distribution.Node.Selector != nil {
+		pt.Spec.NodeSelector = pd.Spec.Distribution.Node.Selector
+	}
+
+	if pd.Spec.Distribution.Pod.TopologySpreadConstaints != nil {
+		if err := r.reconcileTargetPodTemplateTSCs(ctx, pd, pt); err != nil {
+			return err
+		}
+	}
+	if pd.Spec.Distribution.Pod.Affinity != nil {
+		if err := r.reconcileTargetPodTemplatePodAffinity(ctx, pd, pt); err != nil {
+			return err
+		}
+
+	}
+	if pd.Spec.Distribution.Pod.AntiAffinity != nil {
+
+	}
+
+	return nil
+}
+
+func (r *PodDistributionReconciler) reconcileTargetPodTemplateTSCs(
+	ctx context.Context,
+	pd *poddistributionv1alpha1.PodDistribution,
+	pt *corev1.PodTemplateSpec,
+) error {
+	// .spec.distribution value is already checked
+	distribution := pd.Spec.Distribution
+
+	pt.Spec.TopologySpreadConstraints = make([]corev1.TopologySpreadConstraint, 0)
+	for _, ptsc := range distribution.Pod.TopologySpreadConstaints {
+		if ptsc.Manual != nil {
+			pt.Spec.TopologySpreadConstraints = append(
+				pt.Spec.TopologySpreadConstraints,
+				*ptsc.Manual,
+			)
+			continue
+		}
+
+		// TODO: auto mode
+	}
+
+	return nil
+}
+
+func (r *PodDistributionReconciler) reconcileTargetPodTemplatePodAffinity(
+	ctx context.Context,
+	pd *poddistributionv1alpha1.PodDistribution,
+	pt *corev1.PodTemplateSpec,
+) error {
+	// .spec.distribution.pod.affinity value is already checked
+	affinity := pd.Spec.Distribution.Pod.Affinity
+
+	if pt.Spec.Affinity == nil {
+		pt.Spec.Affinity = &corev1.Affinity{}
+	}
+
+	if affinity.Auto != nil {
+		// TODO: auto mode
+	} else {
+		pt.Spec.Affinity.PodAffinity = affinity.Manual
+	}
+
+	return nil
 }
 
 func (r *PodDistributionReconciler) reconcileLabeler(
