@@ -90,6 +90,15 @@ var _ = Describe("PodDistribution Controller with PDB feature", func() {
 
 			By("Cleanup the specific resource instance PodDistribution")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			By("Cleanup the target deployment for the PodDistribution")
+			Eventually(func() error {
+				err := k8sClient.Get(ctx, typeNamespacedName, deployment)
+				if err != nil {
+					return err
+				}
+				return k8sClient.Delete(ctx, deployment)
+			}).Should(Succeed())
 		})
 
 		It("should successfully reconcile the resource", func() {

@@ -9,6 +9,9 @@ metadata:
     app.kubernetes.io/created-by: pod-distribution-controller
   name: poddistribution-auto-sample
 spec:
+  labeler:
+    labelRules:
+      - CELExpression: "spec.replicas == 2"
   selector:
     kind: Deployment
     labelSelector:
