@@ -84,7 +84,7 @@ func (r *LabelerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	filtered, err := r.filterWithCELExpression(ctx, l, targets)
+	filtered, err := r.filterWithCELExpression(ctx, targets)
 	if err != nil {
 		logger.V(0).Error(err, "error in filterWithCELExpression()")
 		return ctrl.Result{}, err
@@ -208,7 +208,6 @@ func (r *LabelerReconciler) collectTarget(
 
 func (r *LabelerReconciler) filterWithCELExpression(
 	ctx context.Context,
-	l *poddistributionv1alpha1.Labeler,
 	targets []CELMatchedObject,
 ) ([]CELMatchedObject, error) {
 	filtered := []CELMatchedObject{}

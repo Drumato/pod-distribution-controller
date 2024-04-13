@@ -112,10 +112,10 @@ func (r *PodDistributionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
-	if pd.Spec.HPA != nil {
-		// hpa := autoscalingv2.HorizontalPodAutoscaler{}
-		// TODO: reconcile HPA
-	}
+	// TODO: reconcile HPA
+	// if pd.Spec.HPA != nil {
+	// hpa := autoscalingv2.HorizontalPodAutoscaler{}
+	// }
 
 	if err := r.Status().Update(ctx, pd); err != nil {
 		logger.V(0).Error(err, "error in r.Status().Update()")
@@ -176,7 +176,7 @@ func (r *PodDistributionReconciler) reconcileTargetPodTemplate(
 	}
 
 	if pd.Spec.Distribution.Pod.TopologySpreadConstaints != nil {
-		if err := r.reconcileTargetPodTemplateTSCs(ctx, pd, pt); err != nil {
+		if err := r.reconcileTargetPodTemplateTSCs(pd, pt); err != nil {
 			return err
 		}
 	}
@@ -197,7 +197,6 @@ func (r *PodDistributionReconciler) reconcileTargetPodTemplate(
 }
 
 func (r *PodDistributionReconciler) reconcileTargetPodTemplateTSCs(
-	ctx context.Context,
 	pd *poddistributionv1alpha1.PodDistribution,
 	pt *corev1.PodTemplateSpec,
 ) error {

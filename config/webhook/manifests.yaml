@@ -1,0 +1,26 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-poddistribution-drumato-com-v1alpha-poddistribution
+  failurePolicy: Fail
+  name: vcronjob.kb.io
+  rules:
+  - apiGroups:
+    - poddistribution.drumato.com
+    apiVersions:
+    - v1alpha
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - poddistributions
+  sideEffects: None

@@ -32,7 +32,7 @@ type PodDistributionSpec struct {
 	// +optional
 	Distribution *DistributionSpec `json:"distribution"`
 	// +optional
-	PDB *PodDistributionPDBSpec `json:"pdb,omitEmpty"`
+	PDB *PodDistributionPDBSpec `json:"pdb,omitempty"`
 	// +optional
 	Labeler *LabelerSpec `json:"labelers"`
 	// +optional
@@ -109,9 +109,9 @@ type DistributionNodeSpec struct {
 
 type PodDistributionPDBSpec struct {
 	// +optional
-	MinAvailable *PodDistributionMinAvailableSpec `json:"minAvailable,omitEmpty"`
+	MinAvailable *PodDistributionMinAvailableSpec `json:"minAvailable,omitempty"`
 	// +optional
-	MaxUnavailable *PodDistributionMaxUnavailableSpec `json:"maxUnavailable,omitEmpty"`
+	MaxUnavailable *PodDistributionMaxUnavailableSpec `json:"maxUnavailable,omitempty"`
 }
 
 const (

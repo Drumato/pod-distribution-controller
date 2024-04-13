@@ -23,7 +23,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	// "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -31,11 +31,12 @@ import (
 
 // log is for logging in this package.
 var poddistributionlog = logf.Log.WithName("poddistribution-resource")
-var podDistributionWebhookK8sClient client.Client
+
+//var podDistributionWebhookK8sClient client.Client
 
 // SetupWebhookWithManager will setup the manager to manage the webhooks
 func (r *PodDistribution) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	podDistributionWebhookK8sClient = mgr.GetClient()
+	//podDistributionWebhookK8sClient = mgr.GetClient()
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
 		Complete()
