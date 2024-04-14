@@ -34,10 +34,23 @@ const (
 
 	certmanagerVersion = "v1.5.3"
 	certmanagerURLTmpl = "https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml"
+	argoCDURL          = "https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
 )
 
 func warnError(err error) {
 	fmt.Fprintf(GinkgoWriter, "warning: %v\n", err)
+}
+
+func InstallArgoCDOperator() error {
+	if _, err := Run(exec.Command(kubectlPath, "create", "ns", "argocd")); err != nil {
+		return err
+	}
+
+	if _, err := Run(exec.Command(kubectlPath, "apply", "-n", "argocd", "-f", argoCDURL)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // InstallPrometheusOperator installs the prometheus Operator to be used to export the enabled metrics.
@@ -81,6 +94,13 @@ func UninstallPrometheusOperator() {
 func UninstallCertManager() {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
 	cmd := exec.Command(kubectlPath, "delete", "-f", url)
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+func UninstallArgoCD() {
+	cmd := exec.Command(kubectlPath, "delete", "-n", "argocd", "-f", argoCDURL)
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}

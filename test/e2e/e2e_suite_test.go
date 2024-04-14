@@ -56,6 +56,9 @@ var _ = BeforeSuite(func() {
 	By("installing the cert-manager")
 	Expect(utils.InstallCertManager()).To(Succeed())
 
+	By("installing ArgoCD operator")
+	Expect(utils.InstallArgoCDOperator()).To(Succeed())
+
 	By("creating manager namespace")
 	cmd := exec.Command(kubectlPath, "create", "ns", namespace)
 	_, _ = utils.Run(cmd)
@@ -121,6 +124,9 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
+	By("uninstalling the ArgoCD")
+	utils.UninstallArgoCD()
+
 	By("uninstalling the Prometheus manager bundle")
 	utils.UninstallPrometheusOperator()
 
